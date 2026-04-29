@@ -1,0 +1,15 @@
+# Compiled binary
+/mcp-withallo
+
+# Go workspace files
+go.work
+go.work.sum
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Local Claude artifacts
+.claude/
