@@ -53,7 +53,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "allo": {
-      "command": "/Users/edouard/go/bin/mcp-withallo",
+      "command": "mcp-withallo",
       "env": { "ALLO_API_KEY": "your-api-key-here" }
     }
   }
@@ -70,7 +70,7 @@ Option 1 — global, in `~/.claude/settings.json`:
 {
   "mcpServers": {
     "allo": {
-      "command": "/Users/edouard/go/bin/mcp-withallo",
+      "command": "mcp-withallo",
       "env": { "ALLO_API_KEY": "your-api-key-here" }
     }
   }
@@ -83,14 +83,14 @@ Option 2 — per project, in a `.mcp.json` file at the repo root:
 {
   "mcpServers": {
     "allo": {
-      "command": "/Users/edouard/go/bin/mcp-withallo",
+      "command": "mcp-withallo",
       "env": { "ALLO_API_KEY": "your-api-key-here" }
     }
   }
 }
 ```
 
-Replace `/Users/edouard/go/bin/mcp-withallo` with the actual path on your machine if it differs (run `which mcp-withallo` after `go install`).
+If `mcp-withallo` is not on your `PATH`, replace `"command": "mcp-withallo"` with the absolute path (run `which mcp-withallo` to find it — typically `$(go env GOPATH)/bin/mcp-withallo`). Note that Claude Desktop does **not** expand `~` in `command`.
 
 ## Smoke test
 
