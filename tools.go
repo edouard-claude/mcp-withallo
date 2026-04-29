@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -28,9 +30,13 @@ func registerTools(s *server.MCPServer, c *AlloClient) {
 
 // respond turns a raw HTTP response into a CallToolResult.
 // 2xx → text content with the JSON body verbatim. Non-2xx → tool-level error.
+// 429 is formatted explicitly so Claude can decide whether to back off.
 func respond(body []byte, status int, err error) (*mcp.CallToolResult, error) {
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("HTTP error: %v", err)), nil
+	}
+	if status == 429 {
+		return mcp.NewToolResultError(formatRateLimit(body)), nil
 	}
 	if status < 200 || status >= 300 {
 		return mcp.NewToolResultError(fmt.Sprintf("Allo API %d: %s", status, string(body))), nil
@@ -39,6 +45,49 @@ func respond(body []byte, status int, err error) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultText("{}"), nil
 	}
 	return mcp.NewToolResultText(string(body)), nil
+}
+
+// formatRateLimit parses the 429 body shape documented at
+// https://help.withallo.com/en/api-reference/guides/rate-limits and produces
+// a single sentence Claude can act on. Falls back to the raw body on parse failure.
+func formatRateLimit(body []byte) string {
+	var parsed struct {
+		Code    string `json:"code"`
+		Error   struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Details []struct {
+			Message string `json:"message"`
+			Field   string `json:"field"`
+		} `json:"details"`
+	}
+	_ = json.Unmarshal(body, &parsed)
+	code := parsed.Code
+	if code == "" {
+		code = parsed.Error.Code
+	}
+	if code == "" {
+		return fmt.Sprintf("Allo API 429 (rate limit): %s", string(body))
+	}
+	limit, kind, resetIn := "?", "?", "?"
+	if len(parsed.Details) > 0 {
+		for kv := range strings.SplitSeq(parsed.Details[0].Message, ";") {
+			k, v, ok := strings.Cut(strings.TrimSpace(kv), "=")
+			if !ok {
+				continue
+			}
+			switch k {
+			case "limit":
+				limit = v
+			case "type":
+				kind = v
+			case "reset_in":
+				resetIn = v
+			}
+		}
+	}
+	return fmt.Sprintf("Allo API 429 %s: %s quota exceeded (limit=%s, resets in %ss). Stop calling and tell the user — do not retry automatically.", code, kind, limit, resetIn)
 }
 
 // --- v2 simple GETs ---------------------------------------------------------

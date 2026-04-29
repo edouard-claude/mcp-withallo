@@ -105,11 +105,26 @@ printf '%s\n' \
 
 `tools/list` should return 12 tools; `allo_me` should return your Allo identity.
 
+## Rate limits
+
+Allo enforces two layers of limits ([docs](https://help.withallo.com/en/api-reference/guides/rate-limits.md)):
+
+- **Burst** — visible in `allo_me.rate_limits`, typically `read_per_second: 20`, `write_per_second: 5`. Hard to hit through Claude (one tool call at a time).
+- **Daily quota** — depends on your plan (e.g. `1000/DAILY`). Hits return HTTP 429 with `code: API_KEY_QUOTA_EXCEEDED` and `details[0].message: "limit=...;type=DAILY;reset_in=<seconds>"`.
+
+When a 429 hits, this MCP returns a single-line tool error like:
+```
+Allo API 429 API_KEY_QUOTA_EXCEEDED: DAILY quota exceeded (limit=1000, resets in 3600s). Stop calling and tell the user — do not retry automatically.
+```
+
+The MCP **does not** retry automatically — the error is surfaced to Claude so the user can decide (wait, switch keys, upgrade plan). If you want client-side backoff, layer it on top in your own wrapper.
+
 ## Notes
 
 - Allo uses two pagination conventions: v1 = `page` 0-indexed (default size 10), v2 = `page` 1-indexed (default size 20). Each tool follows the convention of its underlying endpoint.
 - Call transcripts are included in `allo_search_calls` responses under the `transcript` field — an array of `{source, text, timestamp, start_seconds, end_seconds}`.
-- To add write tools later (send SMS, create contact, CRM), follow the pattern of `addAnalyticsOverview` (POST with body) or `addGetContact` (GET with path param) in `tools.go`.
+- `allo_list_conversations` requires `allo_number` (the API rejects calls without it despite the OpenAPI spec marking it optional).
+- To add write tools later (send SMS, create contact, CRM), follow the pattern of `addAnalyticsOverview` (POST with body) or `addGetContact` (GET with path param) in `tools.go`. Note: write endpoints share the same daily quota, so heavy automation will run you out fast.
 
 ## License
 
