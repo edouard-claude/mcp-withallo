@@ -203,7 +203,8 @@ func addListConversations(s *server.MCPServer, c *AlloClient) {
 	tool := mcp.NewTool("allo_list_conversations",
 		mcp.WithDescription("List conversations grouped by contact phone number, sorted by most recent activity. Page is 1-indexed (v2 convention)."),
 		mcp.WithString("allo_number",
-			mcp.Description("Optional Allo phone number (E.164) to filter on."),
+			mcp.Required(),
+			mcp.Description("Allo phone number (E.164). Required: the API rejects this call without one."),
 		),
 		mcp.WithString("last_activity_since",
 			mcp.Description("ISO 8601 timestamp; only return conversations active after this. Useful for incremental syncs."),
@@ -222,10 +223,12 @@ func addListConversations(s *server.MCPServer, c *AlloClient) {
 		),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		q := url.Values{}
-		if v := req.GetString("allo_number", ""); v != "" {
-			q.Set("allo_number", v)
+		alloNumber, err := req.RequireString("allo_number")
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
 		}
+		q := url.Values{}
+		q.Set("allo_number", alloNumber)
 		if v := req.GetString("last_activity_since", ""); v != "" {
 			q.Set("last_activity_since", v)
 		}
