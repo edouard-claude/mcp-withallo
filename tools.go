@@ -52,8 +52,8 @@ func respond(body []byte, status int, err error) (*mcp.CallToolResult, error) {
 // a single sentence Claude can act on. Falls back to the raw body on parse failure.
 func formatRateLimit(body []byte) string {
 	var parsed struct {
-		Code    string `json:"code"`
-		Error   struct {
+		Code  string `json:"code"`
+		Error struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
 		} `json:"error"`
@@ -112,10 +112,25 @@ func addListNumbers(s *server.MCPServer, c *AlloClient) {
 
 func addListUsers(s *server.MCPServer, c *AlloClient) {
 	tool := mcp.NewTool("allo_list_users",
-		mcp.WithDescription("List team members on the Allo account."),
+		mcp.WithDescription("List team members on the Allo account. Filter by role or status."),
+		mcp.WithString("role",
+			mcp.Description("Filter by role: ADMIN, MANAGER, or MEMBER."),
+			mcp.Enum("ADMIN", "MANAGER", "MEMBER"),
+		),
+		mcp.WithString("status",
+			mcp.Description("Filter by status. Default ACTIVE."),
+			mcp.Enum("ACTIVE", "BLOCKED"),
+		),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		return respond(c.Get(ctx, "/v2/api/users", nil))
+		q := url.Values{}
+		if v := req.GetString("role", ""); v != "" {
+			q.Set("role", v)
+		}
+		if v := req.GetString("status", ""); v != "" {
+			q.Set("status", v)
+		}
+		return respond(c.Get(ctx, "/v2/api/users", q))
 	})
 }
 
@@ -132,7 +147,7 @@ func addListTags(s *server.MCPServer, c *AlloClient) {
 
 func addSearchCalls(s *server.MCPServer, c *AlloClient) {
 	tool := mcp.NewTool("allo_search_calls",
-		mcp.WithDescription("Search call history for an Allo number. Each result includes the full transcript (array of {source,text,timestamp,start_seconds,end_seconds}), AI summary, recording_url, tag, and direction (INBOUND/OUTBOUND). Page is 0-indexed."),
+		mcp.WithDescription("Search call history for an Allo number. Each result includes the full transcript (array of {source,text,time,start_seconds,end_seconds}), AI summary, recording_url, tags, type (INBOUND/OUTBOUND) and result (ANSWERED/MISSED/VOICEMAIL/TRANSFERRED/TRANSFERRED_AI/BLOCKED). Page is 0-indexed."),
 		mcp.WithString("allo_number",
 			mcp.Required(),
 			mcp.Description("Your Allo phone number in E.164 format (e.g., +14155551234). Use allo_list_numbers to discover it."),
@@ -261,6 +276,9 @@ func addListConversations(s *server.MCPServer, c *AlloClient) {
 		mcp.WithBoolean("unread",
 			mcp.Description("If true, return only unread conversations."),
 		),
+		mcp.WithString("extend",
+			mcp.Description("Comma-separated extras to enrich each conversation: 'engagement', 'activity', or both."),
+		),
 		mcp.WithNumber("page",
 			mcp.DefaultNumber(1),
 			mcp.Description("Page number, 1-indexed. Default 1."),
@@ -284,6 +302,9 @@ func addListConversations(s *server.MCPServer, c *AlloClient) {
 		if req.GetBool("unread", false) {
 			q.Set("unread", "true")
 		}
+		if v := req.GetString("extend", ""); v != "" {
+			q.Set("extend", v)
+		}
 		q.Set("page", strconv.Itoa(req.GetInt("page", 1)))
 		q.Set("size", strconv.Itoa(req.GetInt("size", 20)))
 		return respond(c.Get(ctx, "/v2/api/conversations", q))
@@ -292,7 +313,7 @@ func addListConversations(s *server.MCPServer, c *AlloClient) {
 
 func addSearchConversationItems(s *server.MCPServer, c *AlloClient) {
 	tool := mcp.NewTool("allo_search_conversation_items",
-		mcp.WithDescription("Keyword search across all calls and SMS. Terms are AND'd with prefix matching ('bill' matches 'billing'). Searches transcripts, summaries, and SMS content. Use this when the user asks 'find calls about X' or 'show messages mentioning Y'."),
+		mcp.WithDescription("Keyword search across all calls and text messages. Terms are AND'd with prefix matching ('bill' matches 'billing'). Searches transcripts, AI summaries, and message content. Use this when the user asks 'find calls about X' or 'show messages mentioning Y'."),
 		mcp.WithString("search",
 			mcp.Description("Keyword query (not natural language). AND'd with prefix matching."),
 		),
@@ -304,21 +325,26 @@ func addSearchConversationItems(s *server.MCPServer, c *AlloClient) {
 			mcp.Enum("INBOUND", "OUTBOUND"),
 		),
 		mcp.WithString("type",
-			mcp.Description("CALL, SMS, or ALL. Default ALL."),
-			mcp.Enum("CALL", "SMS", "ALL"),
+			mcp.Description("CALL or TEXT_MESSAGE. Omit to include both."),
+			mcp.Enum("CALL", "TEXT_MESSAGE"),
 		),
 		mcp.WithString("result",
-			mcp.Description("ANSWERED, VOICEMAIL, or TRANSFERRED."),
-			mcp.Enum("ANSWERED", "VOICEMAIL", "TRANSFERRED"),
+			mcp.Description("Call outcome filter: ANSWERED, MISSED, TRANSFERRED, or VOICEMAIL."),
+			mcp.Enum("ANSWERED", "MISSED", "TRANSFERRED", "VOICEMAIL"),
 		),
 		mcp.WithBoolean("unread", mcp.Description("Only items unread by the team.")),
 		mcp.WithBoolean("unresponded", mcp.Description("Only items still awaiting a response.")),
-		mcp.WithString("sort",
-			mcp.Description("DATE_DESC, DATE_ASC, or RELEVANCE. Default DATE_DESC."),
-			mcp.Enum("DATE_DESC", "DATE_ASC", "RELEVANCE"),
+		mcp.WithBoolean("has_recording", mcp.Description("Only calls that have a recording attached.")),
+		mcp.WithArray("tags",
+			mcp.Description("Filter by tag IDs (returns items matching any of the given tags)."),
+			mcp.Items(map[string]any{"type": "string"}),
 		),
-		mcp.WithString("date_from", mcp.Description("ISO 8601 start of date range filter.")),
-		mcp.WithString("date_to", mcp.Description("ISO 8601 end of date range filter.")),
+		mcp.WithString("sort",
+			mcp.Description("Sort order: RELEVANCE (default when search is set), RECENT, or OLDEST."),
+			mcp.Enum("RELEVANCE", "RECENT", "OLDEST"),
+		),
+		mcp.WithString("date_from", mcp.Description("Start of date range filter (YYYY-MM-DD).")),
+		mcp.WithString("date_to", mcp.Description("End of date range filter (YYYY-MM-DD).")),
 		mcp.WithNumber("page",
 			mcp.DefaultNumber(1),
 			mcp.Description("Page number, 1-indexed. Default 1."),
@@ -348,6 +374,12 @@ func addSearchConversationItems(s *server.MCPServer, c *AlloClient) {
 		if req.GetBool("unresponded", false) {
 			body["unresponded"] = true
 		}
+		if req.GetBool("has_recording", false) {
+			body["has_recording"] = true
+		}
+		if tags := req.GetStringSlice("tags", nil); len(tags) > 0 {
+			body["tags"] = tags
+		}
 		df, dt := req.GetString("date_from", ""), req.GetString("date_to", "")
 		if df != "" || dt != "" {
 			date := map[string]string{}
@@ -365,10 +397,13 @@ func addSearchConversationItems(s *server.MCPServer, c *AlloClient) {
 
 func addGetConversationItem(s *server.MCPServer, c *AlloClient) {
 	tool := mcp.NewTool("allo_get_conversation_item",
-		mcp.WithDescription("Fetch a single call ('cll-*' ID) or SMS ('msg-*' ID) with full details (transcript, summary, recording_url for calls; body for SMS)."),
+		mcp.WithDescription("Fetch a single call ('cll-*' ID) or text message ('msg-*' ID) with full details (transcript, summary, recording_url for calls; body for messages)."),
 		mcp.WithString("id",
 			mcp.Required(),
-			mcp.Description("Item ID. 'cll-*' for calls, 'msg-*' for SMS."),
+			mcp.Description("Item ID. 'cll-*' for calls, 'msg-*' for text messages."),
+		),
+		mcp.WithString("extend",
+			mcp.Description("Comma-separated extras to include, e.g. 'transcript,tags'."),
 		),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -376,23 +411,34 @@ func addGetConversationItem(s *server.MCPServer, c *AlloClient) {
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		return respond(c.Get(ctx, "/v2/api/conversations/items/"+url.PathEscape(id), nil))
+		q := url.Values{}
+		if v := req.GetString("extend", ""); v != "" {
+			q.Set("extend", v)
+		}
+		return respond(c.Get(ctx, "/v2/api/conversations/items/"+url.PathEscape(id), q))
 	})
 }
 
 func addAnalyticsOverview(s *server.MCPServer, c *AlloClient) {
 	tool := mcp.NewTool("allo_analytics_overview",
-		mcp.WithDescription("Team analytics over a date range: call volume, SMS volume, average handling, etc."),
+		mcp.WithDescription("Team analytics over a date range: call volume, SMS volume, average handling time, etc. Supports period-over-period comparison via compare_date_from/compare_date_to and per-user filtering via user_ids."),
 		mcp.WithString("date_from",
 			mcp.Required(),
-			mcp.Description("ISO 8601 start of date range, e.g. '2026-04-01'."),
+			mcp.Description("Start of date range, YYYY-MM-DD (e.g. '2026-04-01')."),
 		),
 		mcp.WithString("date_to",
 			mcp.Required(),
-			mcp.Description("ISO 8601 end of date range, e.g. '2026-04-29'."),
+			mcp.Description("End of date range, YYYY-MM-DD (e.g. '2026-04-29')."),
 		),
-		mcp.WithString("allo_number",
-			mcp.Description("Optional Allo number (E.164) to scope metrics."),
+		mcp.WithString("compare_date_from",
+			mcp.Description("Optional comparison period start (YYYY-MM-DD) for period-over-period metrics."),
+		),
+		mcp.WithString("compare_date_to",
+			mcp.Description("Optional comparison period end (YYYY-MM-DD)."),
+		),
+		mcp.WithArray("user_ids",
+			mcp.Description("Optional list of user IDs to scope metrics to specific team members."),
+			mcp.Items(map[string]any{"type": "string"}),
 		),
 	)
 	s.AddTool(tool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -407,10 +453,13 @@ func addAnalyticsOverview(s *server.MCPServer, c *AlloClient) {
 		body := map[string]any{
 			"date": map[string]string{"from": from, "to": to},
 		}
-		if v := req.GetString("allo_number", ""); v != "" {
-			body["allo_number"] = v
+		cfrom, cto := req.GetString("compare_date_from", ""), req.GetString("compare_date_to", "")
+		if cfrom != "" && cto != "" {
+			body["compare_date"] = map[string]string{"from": cfrom, "to": cto}
+		}
+		if ids := req.GetStringSlice("user_ids", nil); len(ids) > 0 {
+			body["user_ids"] = ids
 		}
 		return respond(c.PostJSON(ctx, "/v2/api/analytics/overview", body))
 	})
 }
-

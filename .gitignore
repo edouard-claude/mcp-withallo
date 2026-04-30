@@ -1,5 +1,19 @@
 # Compiled binary
 /mcp-withallo
+mcp-withallo.exe
+
+# Go build & test artifacts
+*.exe
+*.test
+*.out
+coverage.out
+coverage.html
+
+# goreleaser output
+/dist/
+
+# Vendored deps (we use modules)
+/vendor/
 
 # Go workspace files
 go.work
@@ -9,7 +23,14 @@ go.work.sum
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
 .DS_Store
+
+# Local env / secrets — never commit ALLO_API_KEY
+.env
+.env.local
+*.local
 
 # Local Claude artifacts
 .claude/
