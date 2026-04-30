@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-30
+
 ### Fixed
 - `allo_search_conversation_items` enums now match the live API: `type` accepts `CALL` / `TEXT_MESSAGE` (was `CALL` / `SMS` / `ALL`); `result` adds `MISSED`; `sort` is `RELEVANCE` / `RECENT` / `OLDEST` (was `DATE_DESC` / `DATE_ASC` / `RELEVANCE`). Previous values were silently rejected by Allo.
 - `allo_search_calls` description: transcript entries carry `time`, not `timestamp`; the call direction field is `type` (not `direction`); added `MISSED`, `TRANSFERRED_AI`, `BLOCKED` to the documented `result` outcomes.
@@ -19,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `allo_list_conversations` exposes `extend` to enrich responses with `engagement` / `activity`.
 - `allo_get_conversation_item` exposes `extend` for transcript / tag enrichment.
 - LICENSE (MIT), CONTRIBUTING, SECURITY, CHANGELOG, Makefile, `.goreleaser.yaml`, GitHub Actions CI + release workflows, issue / PR templates.
+- Multi-OS prebuilt binaries (linux/darwin/windows × amd64/arm64) published on tag.
 
 ## [0.1.0] - 2026-04-29
 
@@ -39,5 +42,6 @@ Initial release.
 - `allo_list_conversations` requires `allo_number` (the Allo API rejects calls without it despite the OpenAPI spec marking it optional).
 - The MCP does not retry on 429 — the error is surfaced to the client so the user can decide.
 
-[Unreleased]: https://github.com/edouard-claude/mcp-withallo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/edouard-claude/mcp-withallo/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/edouard-claude/mcp-withallo/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/edouard-claude/mcp-withallo/releases/tag/v0.1.0

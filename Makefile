@@ -24,6 +24,7 @@ fmt: ## Format all Go files
 lint: ## Check formatting + vet (CI-equivalent)
 	@out=$$(gofmt -l .); if [ -n "$$out" ]; then echo "needs gofmt:"; echo "$$out"; exit 1; fi
 	go vet $(PKG)
+	@command -v golangci-lint >/dev/null && golangci-lint run --timeout=3m || echo "(golangci-lint not installed — skipping; install with: brew install golangci-lint)"
 
 tidy: ## Tidy go.mod / go.sum
 	go mod tidy

@@ -16,7 +16,7 @@ func main() {
 
 	s := server.NewMCPServer(
 		"mcp-withallo",
-		"0.1.0",
+		"0.2.0",
 		server.WithToolCapabilities(true),
 	)
 
